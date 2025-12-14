@@ -569,83 +569,6 @@ def _matchup_need_vector(
     return {cat: val / total for cat, val in need.items()}
 
 
-def get_matchup_category_needs(
-    league: League,
-    team: TeamProfile,
-) -> List[Dict[str, Any]]:
-    """
-    Expose a detailed, matchup-aware view per category:
-
-      [
-        {
-          "category": "PTS",
-          "my_value": 410.0,
-          "opp_value": 432.0,
-          "margin": -22.0,          # >0 = you're ahead, <0 = behind (TOV flipped)
-          "relative_gap": 0.05,     # |margin| / max(|opp_value|, 1e-3)
-          "status": "LOSING",       # WIN / LOSS / TIE
-          "need_weight": 0.23,      # from matchup_need_vector (normalized)
-        },
-        ...
-      ]
-    """
-    out: List[Dict[str, Any]] = []
-    if league is None:
-        return out
-
-    stats_pair = _get_matchup_stats_for_team(league, team.team_abbrev)
-    if stats_pair is None:
-        return out
-
-    my_stats_raw, opp_stats_raw = stats_pair
-    need_vec = _matchup_need_vector(league, team)
-
-    for cat in CATEGORIES:
-        my_cat = (my_stats_raw.get(cat) or {})
-        opp_cat = (opp_stats_raw.get(cat) or {})
-
-        my_val = my_cat.get("value", my_cat.get("score"))
-        opp_val = opp_cat.get("value", opp_cat.get("score"))
-
-        if my_val is None or opp_val is None:
-            continue
-
-        try:
-            my_val_f = float(my_val)
-            opp_val_f = float(opp_val)
-        except Exception:
-            continue
-
-        if cat == "TOV":
-            margin = opp_val_f - my_val_f  # positive margin = you're "winning" (fewer TOV)
-        else:
-            margin = my_val_f - opp_val_f
-
-        denom = max(abs(opp_val_f), 1e-3)
-        rel = abs(margin) / denom
-
-        if abs(margin) < 1e-6:
-            status = "TIE"
-        elif margin > 0:
-            status = "WIN"
-        else:
-            status = "LOSS"
-
-        out.append(
-            {
-                "category": cat,
-                "my_value": my_val_f,
-                "opp_value": opp_val_f,
-                "margin": margin,
-                "relative_gap": rel,
-                "status": status,
-                "need_weight": float(need_vec.get(cat, 0.0)),
-            }
-        )
-
-    return out
-
-
 def connect_league(
     league_id: int,
     year: int,
@@ -976,48 +899,6 @@ def _score_package_for_team(
     total_gain += pos_gain
 
     return total_gain, per_cat_gain
-
-
-def _compute_fairness(gain_a: float, gain_b: float) -> float:
-    """
-    Return a fairness score in [0,1], where 1 is perfectly fair (equal gains).
-    (Currently unused; kept for potential alternative fairness experiments.)
-    """
-    total = max(gain_a + gain_b, 1e-8)
-    gap = abs(gain_a - gain_b)
-    return max(0.0, 1.0 - gap / total)
-
-
-def _build_injury_note(
-    team_a: TeamProfile,
-    team_b: TeamProfile,
-    pack_a: List[RosterPlayer],
-    pack_b: List[RosterPlayer],
-) -> str:
-    """
-    Natural-language summary of how injury risk shifts between the two teams.
-    """
-    sev_a_out = _avg_injury_severity(pack_a)
-    sev_a_in = _avg_injury_severity(pack_b)
-    sev_b_out = _avg_injury_severity(pack_b)
-    sev_b_in = _avg_injury_severity(pack_a)
-
-    delta_a = sev_a_in - sev_a_out
-    delta_b = sev_b_in - sev_b_out
-
-    pieces: List[str] = []
-
-    if delta_a < -0.15:
-        pieces.append(f"{team_a.team_name} sheds some injury risk in this deal.")
-    elif delta_a > 0.15:
-        pieces.append(f"{team_a.team_name} takes on a bit more injury risk for upside.")
-
-    if delta_b < -0.15:
-        pieces.append(f"{team_b.team_name} also ends up healthier after the swap.")
-    elif delta_b > 0.15:
-        pieces.append(f"{team_b.team_name} absorbs slightly more risk in return for stats.")
-
-    return " ".join(pieces)
 
 
 def _build_ai_reason(

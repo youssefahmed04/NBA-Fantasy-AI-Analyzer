@@ -25,7 +25,7 @@ from services import (
 
 
 def sidebar_controls() -> None:
-    st.sidebar.markdown("### ⚙️ League Connection")
+    st.sidebar.markdown("### League Connection")
 
     league_id = st.sidebar.text_input(
         "ESPN League ID",
@@ -49,7 +49,7 @@ def sidebar_controls() -> None:
         "SWID cookie (optional for public)", type="password"
     )
 
-    if st.sidebar.button("🔗 Connect to League", use_container_width=True):
+    if st.sidebar.button("Connect to League", use_container_width=True):
         if not league_id:
             st.sidebar.error("Please enter a League ID.")
         else:
@@ -73,7 +73,7 @@ def sidebar_controls() -> None:
                 st.sidebar.error(f"Error connecting to league: {e}")
 
     st.sidebar.markdown("---")
-    st.sidebar.markdown("### 🎚️ Category Weights")
+    st.sidebar.markdown("### Category Weights")
 
     weights: Dict[str, float] = st.session_state.category_weights
     for cat in CATEGORIES:
@@ -86,7 +86,7 @@ def sidebar_controls() -> None:
 
     st.session_state.category_weights = weights
 
-    if st.sidebar.button("🔁 Recalculate Scores", use_container_width=True):
+    if st.sidebar.button(" Recalculate Scores", use_container_width=True):
         league = st.session_state.league
         profiles: List[TeamProfile] = st.session_state.team_profiles
         if league and profiles:
@@ -120,7 +120,7 @@ def render_hero_and_metrics() -> None:
                         LIVE LEAGUE ANALYZER · 9-CAT · AI COACH
                     </div>
                     <h1 style="margin-top: 14px; margin-bottom: 6px;">
-                        🏀 Fantasy League AI Assistant
+                        Fantasy League AI Assistant
                     </h1>
                     <h3 style="margin-top: 0; color:#9ca3af; font-weight:400; font-size:15px;">
                         Real-time strength & punt detection, matchup context, and roster analytics —
@@ -612,7 +612,7 @@ def render_streaming_tab() -> None:
     nba_players = st.session_state.nba_players
     category_weights = st.session_state.category_weights
 
-    st.markdown("### 📈 Waiver Wire Streaming Coach")
+    st.markdown("### Waiver Wire Streaming Coach")
     st.markdown(
         "<span style='font-size:13px; color:#9ca3af;'>"
         "Pick your team, choose a date, and I’ll surface one-day streamers that fit your build "

@@ -39,7 +39,3 @@ class TeamProfile:
 
     strength_categories: List[str] = field(default_factory=list)
     punt_categories: List[str] = field(default_factory=list)
-
-    # 🔽 NEW: league-relative info
-    category_ranks: Dict[str, int] = field(default_factory=dict)        # 1 = best
-    category_percentiles: Dict[str, float] = field(default_factory=dict)  # 0–1

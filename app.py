@@ -49,7 +49,7 @@ def main() -> None:
     st.markdown("")
 
     if st.session_state.league is None or not st.session_state.team_profiles:
-        st.markdown("### 🏀 Fantasy League AI Assistant")
+        st.markdown("### Fantasy League AI Assistant")
         st.write(
             "Connect your ESPN league in the left sidebar to see live analysis of all teams, "
             "matchups, and AI-driven advice."
@@ -64,11 +64,11 @@ def main() -> None:
         tab_streaming,
     ) = st.tabs(
         [
-            "🏆 League Overview",
-            "📅 Current Matchups",
-            "📊 Team Analyzer",
-            "🤝 Trade Analyzer",
-            "📈 Streaming / Waiver Wire",
+            "League Overview",
+            "Current Matchups",
+            "Team Analyzer",
+            "Trade Analyzer",
+            "Streaming / Waiver Wire",
         ]
     )
 
