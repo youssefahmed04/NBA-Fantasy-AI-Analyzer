@@ -8,6 +8,7 @@ import streamlit as st
 from espn_api.basketball import League
 
 from analysis.trade import generate_trade_suggestions
+from analysis.trade_enhanced import generate_enhanced_trade_suggestions
 from core.league import get_profile_by_name
 from fantasy_models import RosterPlayer, TeamProfile
 
@@ -35,6 +36,17 @@ def render_trade_analyzer() -> None:
         "**market-value fairness check** (using z-scores + injury risk)."
     )
 
+    # Enhanced analysis option
+    use_enhanced = st.checkbox(
+        "✨ Use Enhanced Analysis",
+        value=False,
+        help=(
+            "Enhanced analysis includes: diminishing returns on category improvements, "
+            "volatility weighting, category swing value, and correlation penalties. "
+            "Better at finding trades that actually move the needle in close matchups."
+        ),
+    )
+
     team_names = [tp.team_name for tp in profiles]
 
     col_a, col_b = st.columns(2)
@@ -59,11 +71,18 @@ def render_trade_analyzer() -> None:
 
     if st.button("💡 Generate Trade Ideas", type="primary", use_container_width=True):
         with st.spinner("Scanning rosters, strengths, and fairness..."):
-            suggestions = generate_trade_suggestions(
-                team_a=team_a,
-                team_b=team_b,
-                category_weights=st.session_state.category_weights,
-            )
+            if use_enhanced:
+                suggestions = generate_enhanced_trade_suggestions(
+                    team_a=team_a,
+                    team_b=team_b,
+                    category_weights=st.session_state.category_weights,
+                )
+            else:
+                suggestions = generate_trade_suggestions(
+                    team_a=team_a,
+                    team_b=team_b,
+                    category_weights=st.session_state.category_weights,
+                )
 
         if not suggestions:
             st.info(
