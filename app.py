@@ -3,17 +3,14 @@ from __future__ import annotations
 import streamlit as st
 
 from config import CATEGORIES
-from services import build_nba_universe
+from core.league import build_nba_universe
 from styling import inject_css
-from ui_components import (
-    sidebar_controls,
-    render_hero_and_metrics,
-    render_standings_section,
-    render_matchups_tab,
-    render_ai_coach_and_team_detail,
-    render_trade_analyzer,
-    render_streaming_tab,  # 🆕 new import
-)
+from ui.sidebar import sidebar_controls
+from ui.league_view import render_hero_and_metrics, render_standings_section
+from ui.matchup_view import render_matchups_tab
+from ui.team_view import render_ai_coach_and_team_detail
+from ui.trade_view import render_trade_analyzer
+from ui.streaming_view import render_streaming_tab
 
 
 def init_session() -> None:
