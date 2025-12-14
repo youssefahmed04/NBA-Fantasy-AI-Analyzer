@@ -408,3 +408,107 @@ def generate_trade_suggestions(
     suggestions.sort(key=lambda s: s["score"], reverse=True)
     return suggestions[:max_trades]
 
+
+def evaluate_trade_for_team(
+    team: TeamProfile,
+    players_out: List[RosterPlayer],
+    players_in: List[RosterPlayer],
+    category_weights: Dict[str, float],
+    use_enhanced: bool = False,
+) -> Dict[str, Any]:
+    """
+    Evaluate a specific trade for a single team.
+    
+    Returns:
+        {
+            "fit_gain": float,
+            "per_cat_gain": Dict[str, float],
+            "improve_categories": List[str],
+            "hurt_categories": List[str],
+            "position_balance_delta": float,
+            "market_value_out": float,
+            "market_value_in": float,
+            "fairness_estimate": float,
+            "recommendation": str,
+        }
+    """
+    # Compute local z-scores for all players in the trade
+    all_players: List[RosterPlayer] = list(players_out) + list(players_in)
+    _compute_local_player_z(all_players)
+    
+    # Build preference vector
+    if use_enhanced:
+        from analysis.trade_enhanced import _build_enhanced_preference_vector, _score_package_enhanced
+        preferences = _build_enhanced_preference_vector(team, category_weights, None)
+        fit_gain, per_cat_gain = _score_package_enhanced(
+            team=team,
+            preferences=preferences,
+            players_out=players_out,
+            players_in=players_in,
+            opponent=None,
+        )
+    else:
+        preferences = _build_preference_vector(team, category_weights)
+        fit_gain, per_cat_gain = _score_package_for_team(
+            team=team,
+            preferences=preferences,
+            players_out=players_out,
+            players_in=players_in,
+        )
+    
+    # Calculate market values
+    market_value_out = sum(_market_value(p, category_weights) for p in players_out)
+    market_value_in = sum(_market_value(p, category_weights) for p in players_in)
+    
+    # Estimate fairness (one-sided view)
+    avg_value = (abs(market_value_out) + abs(market_value_in)) / 2.0
+    if avg_value <= 1e-6:
+        fairness_estimate = 1.0
+    else:
+        diff = abs(market_value_out - market_value_in)
+        fairness_estimate = max(0.0, 1.0 - diff / avg_value)
+    
+    # Categorize improvements
+    improve_categories = sorted(
+        [c for c in TRADE_CATEGORIES if per_cat_gain.get(c, 0.0) > 0.01],
+        key=lambda c: per_cat_gain[c],
+        reverse=True,
+    )
+    
+    hurt_categories = sorted(
+        [c for c in TRADE_CATEGORIES if per_cat_gain.get(c, 0.0) < -0.01],
+        key=lambda c: per_cat_gain[c],
+    )
+    
+    # Position balance
+    pos_delta = position_balance_delta(team, players_out, players_in)
+    
+    # Generate recommendation
+    if fit_gain > 0.3:
+        recommendation = "✅ Strong trade - significantly improves your roster"
+    elif fit_gain > 0.1:
+        recommendation = "✅ Good trade - improves your roster"
+    elif fit_gain > 0.0:
+        recommendation = "⚠️ Marginal trade - slight improvement"
+    elif fit_gain > -0.1:
+        recommendation = "❌ Poor trade - slight downgrade"
+    else:
+        recommendation = "❌ Bad trade - significant downgrade"
+    
+    if fairness_estimate < 0.75:
+        recommendation += " (value mismatch - you may be overpaying)"
+    elif fairness_estimate > 0.95:
+        recommendation += " (excellent value)"
+    
+    return {
+        "fit_gain": fit_gain,
+        "per_cat_gain": per_cat_gain,
+        "improve_categories": improve_categories,
+        "hurt_categories": hurt_categories,
+        "position_balance_delta": pos_delta,
+        "market_value_out": market_value_out,
+        "market_value_in": market_value_in,
+        "fairness_estimate": fairness_estimate,
+        "recommendation": recommendation,
+    }
+

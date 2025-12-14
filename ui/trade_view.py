@@ -7,7 +7,11 @@ from typing import List
 import streamlit as st
 from espn_api.basketball import League
 
-from analysis.trade import generate_trade_suggestions
+from analysis.trade import (
+    generate_trade_suggestions,
+    evaluate_trade_for_team,
+    TRADE_CATEGORIES,
+)
 from analysis.trade_enhanced import generate_enhanced_trade_suggestions
 from core.league import get_profile_by_name
 from fantasy_models import RosterPlayer, TeamProfile
@@ -29,7 +33,7 @@ def render_trade_analyzer() -> None:
         st.info("Connect your ESPN league in the sidebar to get trade suggestions.")
         return
 
-    st.markdown("### 🤝 Trade Analyzer")
+    st.markdown("### Trade Analyzer")
     st.write(
         "Pick two teams and I'll search for **multi-player deals** that "
         "**reinforce each roster's strengths** while passing a "
@@ -143,4 +147,186 @@ def render_trade_analyzer() -> None:
                 )
 
             st.markdown("</div></div>", unsafe_allow_html=True)
+
+    # Manual Trade Evaluation Section
+    st.markdown("---")
+    st.markdown("### Manual Trade Evaluation")
+    st.write(
+        "Evaluate a specific trade you're considering. Select players from each team "
+        "and see how it impacts **Team A**."
+    )
+
+    eval_use_enhanced = st.checkbox(
+        "✨ Use Enhanced Analysis (for evaluation)",
+        value=False,
+        key="eval_enhanced",
+        help="Use enhanced analysis for manual trade evaluation.",
+    )
+
+    eval_col_a, eval_col_b = st.columns(2)
+    
+    with eval_col_a:
+        eval_team_a_name = st.selectbox(
+            "Your Team (Team A)", team_names, key="eval_team_a"
+        )
+        eval_team_a = get_profile_by_name(profiles, eval_team_a_name)
+        
+        if eval_team_a:
+            eval_team_a_players = [p.display_name for p in eval_team_a.players]
+            eval_players_out = st.multiselect(
+                "Players you're sending",
+                eval_team_a_players,
+                key="eval_players_out",
+                help="Select one or more players you're trading away.",
+            )
+    
+    with eval_col_b:
+        eval_team_b_name = st.selectbox(
+            "Trading Partner (Team B)", 
+            [tn for tn in team_names if tn != eval_team_a_name],
+            key="eval_team_b",
+        )
+        eval_team_b = get_profile_by_name(profiles, eval_team_b_name)
+        
+        if eval_team_b:
+            eval_team_b_players = [p.display_name for p in eval_team_b.players]
+            eval_players_in = st.multiselect(
+                "Players you're receiving",
+                eval_team_b_players,
+                key="eval_players_in",
+                help="Select one or more players you're receiving.",
+            )
+
+    if st.button("🔍 Evaluate Trade", type="primary", use_container_width=True, key="eval_trade"):
+        if not eval_team_a or not eval_team_b:
+            st.error("Please select both teams.")
+        elif not eval_players_out:
+            st.warning("Please select at least one player you're sending.")
+        elif not eval_players_in:
+            st.warning("Please select at least one player you're receiving.")
+        else:
+            # Find the actual player objects
+            players_out_objs = [
+                p for p in eval_team_a.players 
+                if p.display_name in eval_players_out
+            ]
+            players_in_objs = [
+                p for p in eval_team_b.players 
+                if p.display_name in eval_players_in
+            ]
+
+            if len(players_out_objs) != len(eval_players_out):
+                st.error("Some selected players not found in Team A roster.")
+            elif len(players_in_objs) != len(eval_players_in):
+                st.error("Some selected players not found in Team B roster.")
+            else:
+                with st.spinner("Evaluating trade..."):
+                    evaluation = evaluate_trade_for_team(
+                        team=eval_team_a,
+                        players_out=players_out_objs,
+                        players_in=players_in_objs,
+                        category_weights=st.session_state.category_weights,
+                        use_enhanced=eval_use_enhanced,
+                    )
+
+                # Display evaluation results
+                fit_gain = evaluation["fit_gain"]
+                recommendation = evaluation["recommendation"]
+                improve_cats = evaluation["improve_categories"]
+                hurt_cats = evaluation["hurt_categories"]
+                fairness = evaluation["fairness_estimate"]
+                pos_delta = evaluation["position_balance_delta"]
+                market_out = evaluation["market_value_out"]
+                market_in = evaluation["market_value_in"]
+
+                # Recommendation card
+                rec_color = "green" if fit_gain > 0.1 else "orange" if fit_gain > 0 else "red"
+                
+                # Determine value assessment text
+                if fairness > 0.9:
+                    value_text = "You're getting good value"
+                elif fairness > 0.8:
+                    value_text = "Fair value"
+                else:
+                    value_text = "You may be overpaying"
+                
+                st.markdown(
+                    f"""
+                    <div class="coach-card">
+                        <div class="coach-title" style="color: {rec_color};">
+                            {recommendation}
+                        </div>
+                        <div class="coach-body">
+                            <p><strong>Overall Fit Gain:</strong> {fit_gain:.3f}</p>
+                            <p><strong>Value Fairness:</strong> {fairness:.2f} ({value_text})</p>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                # Category breakdown
+                col_cats_left, col_cats_right = st.columns(2)
+                
+                with col_cats_left:
+                    st.markdown("#### 📈 Categories Improved")
+                    if improve_cats:
+                        for cat in improve_cats:
+                            gain = evaluation["per_cat_gain"].get(cat, 0.0)
+                            st.markdown(
+                                f"- **{cat}**: +{gain:.3f}",
+                            )
+                    else:
+                        st.markdown("*No significant improvements*")
+                
+                with col_cats_right:
+                    st.markdown("#### 📉 Categories Hurt")
+                    if hurt_cats:
+                        for cat in hurt_cats:
+                            gain = evaluation["per_cat_gain"].get(cat, 0.0)
+                            st.markdown(
+                                f"- **{cat}**: {gain:.3f}",
+                            )
+                    else:
+                        st.markdown("*No significant losses*")
+
+                # Additional details
+                with st.expander("📋 Detailed Analysis"):
+                    st.markdown("**Market Values:**")
+                    st.write(f"- Players you're sending: {market_out:.2f}")
+                    st.write(f"- Players you're receiving: {market_in:.2f}")
+                    st.write(f"- Net value: {market_in - market_out:.2f}")
+                    
+                    st.markdown("**Position Balance:**")
+                    if pos_delta > 0.1:
+                        st.write(f"✅ Improves position balance (+{pos_delta:.2f})")
+                    elif pos_delta < -0.1:
+                        st.write(f"⚠️ Worsens position balance ({pos_delta:.2f})")
+                    else:
+                        st.write(f"➡️ Neutral position impact ({pos_delta:.2f})")
+                    
+                    st.markdown("**All Category Changes:**")
+                    for cat in TRADE_CATEGORIES:
+                        gain = evaluation["per_cat_gain"].get(cat, 0.0)
+                        if abs(gain) > 0.001:
+                            st.write(f"- {cat}: {gain:+.3f}")
+
+                # Trade summary
+                names_out = ", ".join(p.display_name for p in players_out_objs)
+                names_in = ", ".join(p.display_name for p in players_in_objs)
+                
+                st.markdown(
+                    f"""
+                    <div class="trade-card">
+                        <div class="trade-card-header">
+                            <span class="trade-card-title">Trade Summary</span>
+                        </div>
+                        <div class="trade-card-body">
+                            <p><strong>{eval_team_a_name}</strong> sends: <strong>{names_out}</strong></p>
+                            <p><strong>{eval_team_a_name}</strong> receives: <strong>{names_in}</strong></p>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
